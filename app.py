@@ -61,7 +61,7 @@ def handle_message(event):
     date_str = datetime.now().strftime("%Y-%m-%d")
 
     # --- Excel 保存処理 ---
-    excel_path = "収支管理.xlsx"
+    excel_path = "/tmp/収支管理.xlsx"
 
     # ファイルが無ければ作成
     if not os.path.exists(excel_path):
