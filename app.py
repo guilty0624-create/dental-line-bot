@@ -3,16 +3,43 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from datetime import datetime
-import openpyxl
-import os
+import gspread
+from google.oauth2.service_account import Credentials
 
 app = Flask(__name__)
 
+# LINE API 設定
 LINE_CHANNEL_ACCESS_TOKEN = "qNpwahsG0/l3GyfJ3JEVpvNHkbvgKtcKQRlLgWiWsJMk5IcqRenTu8I94dCg+YwlQNqJJTQa/LXa0MT1jZPgEBATwV2pZ99337xofweLJbrTMzrUSElFTg+lMWc01TAanaTBqtKswWvyqwPP4CTfygdB04t89/1O/w1cDnyilFU="
 LINE_CHANNEL_SECRET = "d98969f847034e6ccc0decbc8db405eb"
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+# Google Sheets 認証設定
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+gc = gspread.authorize(creds)
+
+# スプレッドシートID
+SPREADSHEET_ID = "1499j8WiFUxYzG7kFwus0tb_dD9RNj9KnI8RtFHU13TE"
+
+
+def write_to_sheet(date_str, item, income, expense, memo):
+    sh = gc.open_by_key(SPREADSHEET_ID)
+
+    # シート名（例：2026-02）
+    sheet_name = date_str[:7]
+
+    # シートが無ければ作成
+    try:
+        ws = sh.worksheet(sheet_name)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=5)
+        ws.append_row(["日付", "費目", "収入", "支出", "メモ"])
+
+    # 行を追加
+    ws.append_row([date_str, item, income, expense, memo])
+
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -57,39 +84,13 @@ def handle_message(event):
     else:
         expense = amount
 
-    # --- 日付を自動で付ける ---
+    # 日付
     date_str = datetime.now().strftime("%Y-%m-%d")
 
-    # --- Excel 保存処理 ---
-    excel_path = "/tmp/収支管理.xlsx"
+    # スプレッドシートに書き込み
+    write_to_sheet(date_str, item, income, expense, memo)
 
-    # ファイルが無ければ作成
-    if not os.path.exists(excel_path):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "dummy"  # 最初のシート
-        wb.save(excel_path)
-
-    # ファイルを開く
-    wb = openpyxl.load_workbook(excel_path)
-
-    # シート名（例：2026-02）
-    sheet_name = date_str[:7]
-
-    # シートが無ければ作成
-    if sheet_name not in wb.sheetnames:
-        ws = wb.create_sheet(title=sheet_name)
-        ws.append(["日付", "費目", "収入", "支出", "メモ"])
-    else:
-        ws = wb[sheet_name]
-
-    # データを1行追加
-    ws.append([date_str, item, income, expense, memo])
-
-    # 保存
-    wb.save(excel_path)
-
-    # --- 返信メッセージ ---
+    # 返信メッセージ
     reply_text = (
         f"記録しました！\n"
         f"日付: {date_str}\n"
