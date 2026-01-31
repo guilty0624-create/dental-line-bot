@@ -1,3 +1,5 @@
+gspread
+google-auth
 flask
 line-bot-sdk
 openpyxl
